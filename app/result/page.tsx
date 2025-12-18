@@ -237,7 +237,10 @@ export default function ResultPage() {
     );
   }
 
-  const grade = getGradeFromScore(result.interview_score.total);
+  // 세부 점수 합계 계산 (각 25점 만점 × 4 = 100점 만점)
+  const detailScores = Object.values(result.interview_score.details);
+  const calculatedTotal = detailScores.reduce((sum, score) => sum + score, 0);
+  const grade = getGradeFromScore(calculatedTotal);
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 pb-20">
@@ -266,7 +269,7 @@ export default function ResultPage() {
             <div className="flex flex-col md:flex-row items-center gap-8">
               {/* 원형 게이지 */}
               <div className="flex-shrink-0">
-                <CircularGauge score={result.interview_score.total} />
+                <CircularGauge score={calculatedTotal} />
               </div>
 
               {/* 세부 점수 */}
@@ -276,7 +279,7 @@ export default function ResultPage() {
                   <ScoreBar
                     key={key}
                     label={SCORE_LABELS[key as keyof typeof SCORE_LABELS]}
-                    score={Math.round(value / 4)}
+                    score={value}
                     delay={index * 0.2}
                   />
                 ))}
