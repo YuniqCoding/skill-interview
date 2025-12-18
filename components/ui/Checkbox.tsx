@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 interface CheckboxProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  label: string;
+  label?: string;
   disabled?: boolean;
   className?: string;
 }
@@ -62,7 +62,7 @@ export default function Checkbox({
           />
         </motion.svg>
       </motion.div>
-      <span className="text-slate-300 text-sm">{label}</span>
+      {label && <span className="text-slate-300 text-sm">{label}</span>}
     </label>
   );
 }
