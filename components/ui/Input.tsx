@@ -1,9 +1,12 @@
 'use client';
 
-import { forwardRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { forwardRef, useState } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+// React와 framer-motion 타입 충돌 방지
+type MotionInputProps = Omit<HTMLMotionProps<'input'>, 'children'>;
+
+interface InputProps extends MotionInputProps {
   label?: string;
   error?: string;
   helperText?: string;

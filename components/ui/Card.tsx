@@ -1,12 +1,16 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { forwardRef } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
+import React, { forwardRef } from 'react';
 
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+// React의 onAnimationStart와 framer-motion 충돌 방지
+type MotionDivProps = Omit<HTMLMotionProps<'div'>, 'children'>;
+
+interface CardProps extends MotionDivProps {
   variant?: 'default' | 'elevated' | 'bordered';
   padding?: 'none' | 'sm' | 'md' | 'lg';
   hoverable?: boolean;
+  children?: React.ReactNode;
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
