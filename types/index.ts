@@ -13,7 +13,8 @@ export type JobPosition =
   | "data-engineer"
   | "devops"
   | "ai-ml"
-  | "tpm";
+  | "tpm"
+  | "service-planner";
 
 // 직무 라벨 매핑
 export const JOB_POSITION_LABELS: Record<JobPosition, string> = {
@@ -24,6 +25,7 @@ export const JOB_POSITION_LABELS: Record<JobPosition, string> = {
   devops: "DevOps 엔지니어",
   "ai-ml": "AI/ML 엔지니어",
   tpm: "Technical Project Manager",
+  "service-planner": "서비스 기획자",
 };
 
 // 면접 질문/답변 타입
