@@ -1,14 +1,18 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { forwardRef } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
+import React, { forwardRef } from 'react';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// React의 onDrag와 framer-motion의 onDrag 충돌 방지
+type MotionButtonProps = Omit<HTMLMotionProps<'button'>, 'children'>;
+
+interface ButtonProps extends MotionButtonProps {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
