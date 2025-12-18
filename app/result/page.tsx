@@ -271,12 +271,12 @@ export default function ResultPage() {
 
               {/* 세부 점수 */}
               <div className="flex-1 w-full space-y-4">
-                <h3 className="text-lg font-semibold text-white mb-4">세부 점수</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">세부 점수 <span className="text-slate-500 text-sm font-normal">(각 25점 만점)</span></h3>
                 {Object.entries(result.interview_score.details).map(([key, value], index) => (
                   <ScoreBar
                     key={key}
                     label={SCORE_LABELS[key as keyof typeof SCORE_LABELS]}
-                    score={value}
+                    score={Math.round(value / 4)}
                     delay={index * 0.2}
                   />
                 ))}

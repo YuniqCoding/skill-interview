@@ -31,12 +31,14 @@ export default function InterviewPage() {
     setInterviewStartTime,
     setInterviewEndTime,
     setResult,
+    startInterview: resetForNewInterview,
   } = useInterviewStore();
 
   // 상태
   const [phase, setPhase] = useState<InterviewPhase>('loading');
   const [threadId, setThreadId] = useState<string | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState('');
+  const [displayedText, setDisplayedText] = useState(''); // 타이핑 효과용
   const [questionNumber, setQuestionNumber] = useState(1);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -54,6 +56,7 @@ export default function InterviewPage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const isInitializedRef = useRef<boolean>(false);
+  const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 오디오 레벨 분석
   const analyzeAudio = useCallback(() => {
@@ -74,6 +77,9 @@ export default function InterviewPage() {
     try {
       setPhase('loading');
       setError(null);
+      
+      // 새 면접 시작 시 이전 기록 초기화
+      resetForNewInterview();
 
       const response = await fetch('/api/assistant/start', {
         method: 'POST',
@@ -103,10 +109,47 @@ export default function InterviewPage() {
     }
   };
 
+  // 타이핑 효과 시작 (오디오 길이에 맞춰 속도 조절)
+  const startTypingEffect = (text: string, audioDuration?: number) => {
+    // 이전 타이핑 인터벌 정리
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+    }
+    
+    setDisplayedText('');
+    const words = text.split(' ');
+    let currentIndex = 0;
+    
+    // 오디오 길이가 있으면 그에 맞춰 속도 계산, 없으면 기본값 사용
+    // 오디오보다 약간 빨리 끝나도록 90% 시간 사용
+    const totalTime = audioDuration ? audioDuration * 1000 * 0.9 : words.length * 300;
+    const intervalTime = Math.max(totalTime / words.length, 100); // 최소 100ms
+    
+    typingIntervalRef.current = setInterval(() => {
+      if (currentIndex < words.length) {
+        setDisplayedText(words.slice(0, currentIndex + 1).join(' '));
+        currentIndex++;
+      } else {
+        if (typingIntervalRef.current) {
+          clearInterval(typingIntervalRef.current);
+        }
+      }
+    }, intervalTime);
+  };
+  
+  // 타이핑 효과 완료 (남은 텍스트 모두 표시)
+  const completeTypingEffect = (text: string) => {
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+    }
+    setDisplayedText(text);
+  };
+
   // TTS로 질문 읽기
   const speakQuestion = async (question: string) => {
     try {
       setPhase('ai-speaking');
+      setDisplayedText(''); // 초기화
 
       const response = await fetch('/api/text-to-speech', {
         method: 'POST',
@@ -123,22 +166,35 @@ export default function InterviewPage() {
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
 
+        // 오디오 재생 시작할 때 타이핑 시작
+        audio.onplay = () => {
+          // duration이 유효하면 사용, 아니면 undefined 전달
+          const duration = audio.duration && isFinite(audio.duration) ? audio.duration : undefined;
+          startTypingEffect(question, duration);
+        };
+
         audio.onended = () => {
+          // 오디오 끝나면 남은 텍스트 모두 표시
+          completeTypingEffect(question);
           setPhase('user-ready');
           URL.revokeObjectURL(audioUrl);
         };
 
         audio.onerror = () => {
           console.error('Audio playback error');
+          completeTypingEffect(question);
           setPhase('user-ready');
         };
 
         await audio.play();
       } else {
+        // TTS 실패 시 타이핑 없이 바로 표시
+        setDisplayedText(question);
         setPhase('user-ready');
       }
     } catch (err) {
       console.error('TTS error:', err);
+      setDisplayedText(question);
       setPhase('user-ready');
     }
   };
@@ -349,57 +405,6 @@ export default function InterviewPage() {
     router.push('/result');
   };
 
-  // 🧪 테스트용: 실제 Make 웹훅 호출
-  const testWithMakeWebhook = async () => {
-    setIsSaving(true);
-    setError(null);
-
-    try {
-      const testData = {
-        candidateId: candidateId || 'test-candidate-123',
-        jobPosition: userInfo?.jobPosition || 'frontend',
-        phone: userInfo?.phone || '010-1234-5678',
-        email: userInfo?.email || 'test@example.com',
-        questions: qaHistory.length > 0 
-          ? qaHistory.map((qa) => qa.question)
-          : ['자기소개', '도전적 프로젝트', '협업 도구'],
-        answers: qaHistory.length > 0 
-          ? qaHistory.map((qa) => qa.answer)
-          : ['테스트 답변 1', '테스트 답변 2', '테스트 답변 3'],
-        duration: interviewStartTime
-          ? Math.floor((new Date().getTime() - new Date(interviewStartTime).getTime()) / 1000)
-          : 300,
-      };
-
-      console.log('🧪 Sending to Make webhook:', testData);
-
-      // 실제 Make 웹훅 호출 (mock=false 또는 파라미터 없음)
-      const response = await fetch('/api/save-interview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testData),
-      });
-
-      const result = await response.json();
-      console.log('🧪 Make API Response:', result);
-
-      if (result.success) {
-        setSaveSuccess(true);
-        if (result.data?.analysis) {
-          setResult(result.data.analysis);
-          console.log('🧪 Analysis saved to store:', result.data.analysis);
-        }
-      } else {
-        throw new Error(result.error || 'Make 호출 실패');
-      }
-    } catch (err) {
-      console.error('🧪 Make test error:', err);
-      setError(err instanceof Error ? err.message : 'Make 테스트 중 오류가 발생했습니다.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   // 컴포넌트 마운트 시
   useEffect(() => {
     if (!userInfo) {
@@ -421,6 +426,9 @@ export default function InterviewPage() {
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
       }
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+      }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -437,6 +445,101 @@ export default function InterviewPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-4">
+      {/* 저장 중 로딩 오버레이 */}
+      <AnimatePresence>
+        {isSaving && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-slate-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center shadow-2xl"
+            >
+              {/* 로딩 아이콘 */}
+              <div className="relative w-20 h-20 mx-auto mb-6">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  className="absolute inset-0 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full"
+                />
+                <motion.div
+                  animate={{ rotate: -360 }}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                  className="absolute inset-2 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full"
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl">📊</span>
+                </div>
+              </div>
+
+              <h3 className="text-xl font-bold text-white mb-2">면접 결과 분석 중</h3>
+              <p className="text-slate-400 mb-6">
+                AI가 면접 내용을 분석하고 있습니다.<br />
+                잠시만 기다려주세요.
+              </p>
+
+              {/* 진행 단계 표시 */}
+              <div className="space-y-3">
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0 }}
+                  className="flex items-center gap-3 text-left"
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                    className="w-2 h-2 bg-emerald-500 rounded-full"
+                  />
+                  <span className="text-slate-300 text-sm">면접 데이터 수집 완료</span>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="flex items-center gap-3 text-left"
+                >
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: 0.3 }}
+                    className="w-2 h-2 bg-indigo-500 rounded-full"
+                  />
+                  <span className="text-slate-300 text-sm">답변 분석 진행 중...</span>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 0.5, x: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="flex items-center gap-3 text-left"
+                >
+                  <div className="w-2 h-2 bg-slate-600 rounded-full" />
+                  <span className="text-slate-500 text-sm">피드백 및 점수 생성 대기</span>
+                </motion.div>
+              </div>
+
+              {/* 프로그레스 바 */}
+              <div className="mt-6">
+                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-indigo-500 via-emerald-500 to-indigo-500 bg-[length:200%_100%]"
+                    animate={{ 
+                      backgroundPosition: ['0% 0%', '200% 0%'],
+                    }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="max-w-2xl mx-auto">
         {/* 헤더 */}
         <motion.div
@@ -444,24 +547,13 @@ export default function InterviewPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4">
             <span className="text-slate-400 text-sm">
               {JOB_POSITION_LABELS[userInfo.jobPosition]} 면접
             </span>
-            <div className="flex items-center gap-2">
-              {/* 🧪 테스트용: 바로 완료 화면으로 */}
-              {phase !== 'completed' && (
-                <button
-                  onClick={() => setPhase('completed')}
-                  className="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30"
-                >
-                  🧪 Skip
-                </button>
-              )}
-              <span className="text-indigo-400 font-medium">
-                {questionNumber} / {TOTAL_QUESTIONS}
-              </span>
-            </div>
+            <span className="text-indigo-400 font-medium">
+              {questionNumber} / {TOTAL_QUESTIONS}
+            </span>
           </div>
           <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
             <motion.div
@@ -529,7 +621,16 @@ export default function InterviewPage() {
 
                 <div className="text-center">
                   <p className="text-slate-500 text-sm mb-2">질문 {questionNumber}</p>
-                  <p className="text-white text-lg leading-relaxed">{currentQuestion}</p>
+                  <p className="text-white text-lg leading-relaxed">
+                    {displayedText}
+                    {displayedText !== currentQuestion && (
+                      <motion.span
+                        animate={{ opacity: [1, 0] }}
+                        transition={{ duration: 0.5, repeat: Infinity }}
+                        className="inline-block w-0.5 h-5 bg-indigo-400 ml-1 align-middle"
+                      />
+                    )}
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -644,38 +745,19 @@ export default function InterviewPage() {
 
                 <div className="flex flex-col gap-3">
                   {!saveSuccess ? (
-                    <>
-                      <Button
-                        variant="primary"
-                        size="lg"
-                        onClick={saveAndFinish}
-                        disabled={isSaving}
-                        leftIcon={
-                          isSaving ? (
-                            <motion.div
-                              animate={{ rotate: 360 }}
-                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                              className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
-                            />
-                          ) : (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )
-                        }
-                      >
-                        {isSaving ? '저장 중...' : '면접 종료'}
-                      </Button>
-
-                      {/* 🧪 테스트용 버튼 */}
-                      <button
-                        onClick={testWithMakeWebhook}
-                        disabled={isSaving}
-                        className="text-xs px-3 py-2 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 disabled:opacity-50"
-                      >
-                        🧪 Make 웹훅 테스트
-                      </button>
-                    </>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={saveAndFinish}
+                      disabled={isSaving}
+                      leftIcon={
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      }
+                    >
+                      면접 종료
+                    </Button>
                   ) : (
                     <Button
                       variant="primary"
