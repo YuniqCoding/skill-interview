@@ -199,6 +199,21 @@ export default function InterviewPage() {
     }
   };
 
+  // 질문 스킵 (TTS 중단하고 바로 답변 모드로)
+  const skipQuestion = () => {
+    // 오디오 재생 중지
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    
+    // 타이핑 효과 완료
+    completeTypingEffect(currentQuestion);
+    
+    // 답변 대기 상태로 전환
+    setPhase('user-ready');
+  };
+
   // Base64를 Blob으로 변환
   const base64ToBlob = (base64: string, mimeType: string): Blob => {
     const byteCharacters = atob(base64);
@@ -632,6 +647,27 @@ export default function InterviewPage() {
                     )}
                   </p>
                 </div>
+
+                {/* 스킵 버튼 */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="flex justify-center mt-8"
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={skipQuestion}
+                    rightIcon={
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                      </svg>
+                    }
+                  >
+                    질문 스킵하고 답변하기
+                  </Button>
+                </motion.div>
               </motion.div>
             )}
 
